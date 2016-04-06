@@ -75,11 +75,9 @@ def fill(src, dst, tstart, tstop):
 
         (timeInfo, values) = fetch(src, fromTime, untilTime)
         (start, end, archive_step) = timeInfo
-        pointsToWrite = list(itertools.ifilter(
-            lambda points: points[1] is not None,
-            itertools.izip(xrange(start, end, archive_step), values)))
-        # order points by timestamp, newest first
-        pointsToWrite.sort(key=lambda p: p[0], reverse=True)
+        pointsToWrite = [(end-n*archive_step, values[-n])
+                         for n in xrange(1, (end-start)//archive_step + 1)
+                         if values[-n] is not None]
         update_many(dst, pointsToWrite)
 
         tstop = fromTime
