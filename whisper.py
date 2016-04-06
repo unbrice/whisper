@@ -668,53 +668,56 @@ def __archive_update_many(fh, header, archive, points):
   alignedPoints = [(timestamp - (timestamp % step), value)
                     for (timestamp, value) in points]
   # Create a packed string for each contiguous sequence of points
-  packedStrings = []
+  packedArrays = []
   previousInterval = None
-  currentString = b""
   lenAlignedPoints = len(alignedPoints)
+  currentPack = bytearray(lenAlignedPoints*pointSize)
+  currentPackOffset = 0
+  numberOfPoints = 0
   for i in xrange(0, lenAlignedPoints):
     # Take last point in run of points with duplicate intervals
     if i+1 < lenAlignedPoints and alignedPoints[i][0] == alignedPoints[i+1][0]:
       continue
     (interval, value) = alignedPoints[i]
+    numberOfPoints += 1
     if (not previousInterval) or (interval == previousInterval + step):
-      currentString += struct.pack(pointFormat, interval, value)
+      struct.pack_into(pointFormat, currentPack, currentPackOffset, interval, value)
+      currentPackOffset += pointSize
       previousInterval = interval
     else:
-      numberOfPoints = len(currentString) // pointSize
       startInterval = previousInterval - (step * (numberOfPoints-1))
-      packedStrings.append((startInterval, currentString))
-      currentString = struct.pack(pointFormat, interval, value)
+      packedArrays.append((startInterval, currentPack[:currentPackOffset]))
+      currentPackOffset = 0
+      struct.pack_into(pointFormat, currentPack, currentPackOffset, interval, value)
       previousInterval = interval
-  if currentString:
-    numberOfPoints = len(currentString) // pointSize
+  if currentPackOffset:
     startInterval = previousInterval - (step * (numberOfPoints-1))
-    packedStrings.append((startInterval, currentString))
+    packedArrays.append((startInterval, currentPack[:currentPackOffset]))
 
   # Read base point and determine where our writes will start
   fh.seek(archive['offset'])
   packedBasePoint = fh.read(pointSize)
   (baseInterval, baseValue) = struct.unpack(pointFormat, packedBasePoint)
   if baseInterval == 0:  # This file's first update
-    baseInterval = packedStrings[0][0]  # Use our first string as the base, so we start at the start
+    baseInterval = packedArrays[0][0]  # Use our first string as the base, so we start at the start
 
   # Write all of our packed strings in locations determined by the baseInterval
-  for (interval, packedString) in packedStrings:
+  for (interval, packedArray) in packedArrays:
     timeDistance = interval - baseInterval
     pointDistance = timeDistance // step
     byteDistance = pointDistance * pointSize
     myOffset = archive['offset'] + (byteDistance % archive['size'])
     fh.seek(myOffset)
     archiveEnd = archive['offset'] + archive['size']
-    bytesBeyond = (myOffset + len(packedString)) - archiveEnd
+    bytesBeyond = (myOffset + len(packedArray)) - archiveEnd
 
     if bytesBeyond > 0:
-      fh.write(packedString[:-bytesBeyond])
-      assert fh.tell() == archiveEnd, "archiveEnd=%d fh.tell=%d bytesBeyond=%d len(packedString)=%d" % (archiveEnd, fh.tell(), bytesBeyond, len(packedString))
+      fh.write(packedArray[:-bytesBeyond])
+      assert fh.tell() == archiveEnd, "archiveEnd=%d fh.tell=%d bytesBeyond=%d len(packedArray)=%d" % (archiveEnd, fh.tell(), bytesBeyond, len(packedArray))
       fh.seek(archive['offset'])
-      fh.write(packedString[-bytesBeyond:])  # Safe because it can't exceed the archive (retention checking logic above)
+      fh.write(packedArray[-bytesBeyond:])  # Safe because it can't exceed the archive (retention checking logic above)
     else:
-      fh.write(packedString)
+      fh.write(packedArray)
 
   # Now we propagate the updates to lower-precision archives
   higher = archive
