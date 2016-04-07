@@ -609,15 +609,18 @@ def file_update(fh, value, timestamp):
     os.fsync(fh.fileno())
 
 
-def update_many(path, points):
+def update_many(path, points, points_reverse_sorted=False):
   """update_many(path,points)
 
 path is a string
 points is a list of (timestamp,value) points
+points_reverse_sorted is a boolean, if true points values are assumed to be float, timestamps are assumed
+to be int and they are assumed to be storted by decreasing timestamps
 """
   if not points: return
-  points = [(int(t), float(v)) for (t, v) in points]
-  points.sort(key=lambda p: p[0], reverse=True)  # Order points by timestamp, newest first
+  if not points_reverse_sorted:
+      points = [(int(t), float(v)) for (t, v) in points]
+      points.sort(key=lambda p: p[0], reverse=True)  # Order points by timestamp, newest first
   with open(path, 'r+b') as fh:
     return file_update_many(fh, points)
 

@@ -78,7 +78,7 @@ def fill(src, dst, tstart, tstop):
         pointsToWrite = [(end-n*archive_step, values[-n])
                          for n in xrange(1, (end-start)//archive_step + 1)
                          if values[-n] is not None]
-        update_many(dst, pointsToWrite)
+        update_many(dst, pointsToWrite, points_reverse_sorted=True)
 
         tstop = fromTime
 
